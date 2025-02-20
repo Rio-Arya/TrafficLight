@@ -6,10 +6,10 @@ import cv2
 
 def get_vehicle_weight(class_id):
     weight_map = {
-        1: 1,  # Motor
+        3: 1,  # Motor
         2: 2,  # Mobil
-        3: 4,  # Bis
-        5: 5   # Truk
+        5: 4,  # Bis
+        7: 5   # Truk
     }
     return weight_map.get(class_id, 0)  # Default to 0 if class not found
 
@@ -62,16 +62,14 @@ class CountObject():
                 zone=zone,
                 color=self.colors.by_idx(len(self.zones)-1),
                 thickness=3,
-                text_thickness=8,
-                text_scale=4
+                text_thickness=0,  # Nonaktifkan teks object counting
+                text_scale=0       # Nonaktifkan teks object counting
             )
         )
         self.box_annotators.append(
             sv.BoxAnnotator(
                 color=self.colors.by_idx(len(self.zones)-1),
                 thickness=4,
-                text_thickness=4,
-                text_scale=2
             )
         )
 
@@ -83,8 +81,6 @@ class CountObject():
             return frame  # Return the frame unchanged if no detections
 
         detections = detections[detections.confidence > 0.5]
-
-        total_weight = 0  # Reset total weight each frame
 
         for zone, zone_annotator, box_annotator in zip(self.zones, self.zone_annotators, self.box_annotators):
             mask = zone.trigger(detections=detections)
@@ -110,17 +106,22 @@ class CountObject():
 
             # Summing the total weight of vehicles in one polygon
             zone_total_weight = sum(get_vehicle_weight(class_id) * count for class_id, count in zone_weights.items())
-            total_weight += zone_total_weight
 
-            print(f"Detected vehicles: {zone_weights}, Total weight in this zone: {zone_total_weight}")
+            # Display the total weight in the zone
+            centroid = np.mean(zone.polygon, axis=0).astype(int)
+            cv2.putText(frame, f"Weight: {zone_total_weight}", (centroid[0], centroid[1]), cv2.FONT_HERSHEY_SIMPLEX, 
+                        1, (0, 0, 255), 2, cv2.LINE_AA)
 
-            frame = box_annotator.annotate(scene=frame, detections=detections_filtered, skip_label=False)
+            # Draw bounding boxes without labels
+            for bbox in detections_filtered.xyxy:
+                x1, y1, x2, y2 = map(int, bbox)
+                # Get BGR color from sv.Color
+                color = self.colors.by_idx(len(self.zones)-1)
+                bgr_color = color.as_bgr()  # Convert to BGR format
+                cv2.rectangle(frame, (x1, y1), (x2, y2), bgr_color, 2)
+
             frame = zone_annotator.annotate(scene=frame)
 
-        # Add total weight text to the frame
-        cv2.putText(frame, f"Total Weight: {total_weight} units", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 
-                    1.5, (0, 0, 255), 3, cv2.LINE_AA)
-        
         return frame
 
     def process_video(self):
